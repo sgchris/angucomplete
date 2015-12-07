@@ -5,7 +5,7 @@
  */
 
 angular.module('angucomplete', [] )
-    .directive('angucomplete', function ($parse, $http, $sce, $timeout) {
+    .directive('angucomplete', ['$parse', '$http', '$sce', '$timeout', function ($parse, $http, $sce, $timeout) {
     return {
         restrict: 'EA',
         scope: {
@@ -58,7 +58,7 @@ angular.module('angucomplete', [] )
                     if ($scope.titleField && $scope.titleField != "") {
                         titleFields = $scope.titleField.split(",");
                     }
-
+                    
                     for (var i = 0; i < responseData.length; i++) {
                         // Get title variables
                         var titleCode = [];
@@ -84,9 +84,10 @@ angular.module('angucomplete', [] )
 
                         var text = titleCode.join(' ');
                         if ($scope.matchClass) {
-                            var re = new RegExp(str, 'i');
-                            var strPart = text.match(re)[0];
-                            text = $sce.trustAsHtml(text.replace(re, '<span class="'+ $scope.matchClass +'">'+ strPart +'</span>'));
+                            var re = new RegExp('(' + str.replace(/\W+/g, '|') + ')', 'i');
+                            var matches = text.match(re);
+                            var strPart = matches && matches[0] ? matches[0] : '';
+                            text = $sce.trustAsHtml(text.replace(re, '<span class="'+ $scope.matchClass +'">$1</span>'));
                         }
 
                         var resultRow = {
@@ -103,9 +104,15 @@ angular.module('angucomplete', [] )
                 } else {
                     $scope.results = [];
                 }
+                
+                // cut the results, leave only 8 first
+                if ($scope.results.length) {
+                    $scope.results = $scope.results.slice(0, 8);
+                }
             }
 
             $scope.searchTimerComplete = function(str) {
+                str = str.toLowerCase();
                 // Begin the search
 
                 if (str.length >= $scope.minLength) {
@@ -113,18 +120,28 @@ angular.module('angucomplete', [] )
                         var searchFields = $scope.searchFields.split(",");
 
                         var matches = [];
+                        var searchTerms = str.split(/\s+/);
 
                         for (var i = 0; i < $scope.localData.length; i++) {
-                            var match = false;
-
+                            // combine a string of all the search fields values 
+                            var combinedStringArr = [];
                             for (var s = 0; s < searchFields.length; s++) {
-                                match = match || (typeof $scope.localData[i][searchFields[s]] === 'string' && typeof str === 'string' && $scope.localData[i][searchFields[s]].toLowerCase().indexOf(str.toLowerCase()) >= 0);
+                                var val = $scope.localData[i][searchFields[s]] || '';
+                                combinedStringArr.push(val.toString().toLowerCase());
                             }
-
-                            if (match) {
-                                matches[matches.length] = $scope.localData[i];
+                            var combinedString = combinedStringArr.join(' ');
+                            
+                            // check that the combined string fits all the requested search terms
+                            var matchesAllTheStrings = true;
+                            for (var si = 0; si < searchTerms.length; si++) {
+                                matchesAllTheStrings &= (combinedString.indexOf(searchTerms[si]) >= 0);
+                            }
+                            
+                            if (matchesAllTheStrings) {
+                                matches.push($scope.localData[i]);
                             }
                         }
+                    
 
                         $scope.searching = false;
                         $scope.processResults(matches, str);
@@ -219,13 +236,23 @@ angular.module('angucomplete', [] )
 
                 } else if (event.which == 13) {
                     if ($scope.results && $scope.currentIndex >= 0 && $scope.currentIndex < $scope.results.length) {
+                        // ENTER on selected item
                         $scope.selectResult($scope.results[$scope.currentIndex]);
                         $scope.$apply();
                         event.preventDefault;
                         event.stopPropagation();
-                    } else {
-                        $scope.results = [];
+                    } else if ($scope.results && $scope.results.length == 1) {
+                        // ENTER on one search result
+                        $scope.selectResult($scope.results[0]);
                         $scope.$apply();
+                        event.preventDefault;
+                        event.stopPropagation();
+                    } else {
+                        // ENTER on search results without selection (don't do anything)
+                        if ($scope.results.length > 0) {
+                            $scope.selectResult($scope.results[0]);
+                            $scope.$apply();
+                        }
                         event.preventDefault;
                         event.stopPropagation();
                     }
@@ -242,5 +269,5 @@ angular.module('angucomplete', [] )
 
         }
     };
-});
+}]);
 
